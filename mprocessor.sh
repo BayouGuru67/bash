@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default starting path
-DEFAULT_PATH="/default/path/to/files/"
+DEFAULT_PATH="/home/bayouguru/N-1Tb/pub/mp3/"
 
 # Initialize counts
 underscore_removed_count=0
@@ -50,21 +50,16 @@ rename_mp3() {
     # Process files in the directory
     for file in "$directory"/*.mp3; do
         if [ -f "$file" ]; then
-            # Extract artist, album, track number, and title from the filename
-            if [[ "$(basename "$file")" =~ ^(.+)\ \((.+)\)\ \-\ ([0-9]+)\ \-\ (.+)\.mp3$ ]]; then
-                artist="${BASH_REMATCH[1]}"
-                album="${BASH_REMATCH[2]}"
-                track_number="${BASH_REMATCH[3]}"
-                title="${BASH_REMATCH[4]}"
+            # Extract track number and title from the filename
+            if [[ "$(basename "$file")" =~ ^([0-9]+)[[:space:]]*[-]?[[:space:]]*(.+)\.mp3$ ]]; then
+                track_number="${BASH_REMATCH[1]}"
+                title="${BASH_REMATCH[2]}"
 
-                # Remove leading and trailing whitespace from extracted fields
-                artist=$(echo "$artist" | sed 's/^[[:blank:]]*//; s/[[:blank:]]*$//')
-                album=$(echo "$album" | sed 's/^[[:blank:]]*//; s/[[:blank:]]*$//')
-                track_number=$(echo "$track_number" | sed 's/^[[:blank:]]*//; s/[[:blank:]]*$//')
-                title=$(echo "$title" | sed 's/^[[:blank:]]*//; s/[[:blank:]]*$//')
+                # Get the album from the directory path
+                album=$(basename "$(dirname "$file")")
 
-                # Capitalize the first letter of each word in the title
-                title=$(echo "$title" | sed 's/.*/\L&/; s/[a-z]*/\u&/g')
+                # Get the artist from the parent directory
+                artist=$(basename "$(dirname "$(dirname "$file")")")
 
                 # Create new filename
                 new_filename="${artist} - ${album} - ${track_number} - ${title}.mp3"
