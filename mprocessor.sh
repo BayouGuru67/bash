@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default starting path
-DEFAULT_PATH="/home/bayouguru/N-1Tb/pub/mp3/"
+DEFAULT_PATH="/path/to/mp3/"
 
 # Initialize counts
 underscore_removed_count=0
