@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default starting path
-DEFAULT_PATH="/path/to/mp3/"
+DEFAULT_PATH="/home/bayouguru/N-1Tb/pub/mp3/"
 
 # Initialize counts
 underscore_removed_count=0
@@ -50,7 +50,7 @@ rename_mp3() {
     # Process files in the directory
     for file in "$directory"/*.mp3; do
         if [ -f "$file" ]; then
-            # Extract track number and title from the filename
+            # Extract track number and title from the filename (standard format)
             if [[ "$(basename "$file")" =~ ^([0-9]+)[[:space:]]*[-]?[[:space:]]*(.+)\.mp3$ ]]; then
                 track_number="${BASH_REMATCH[1]}"
                 title="${BASH_REMATCH[2]}"
@@ -60,6 +60,18 @@ rename_mp3() {
 
                 # Get the artist from the parent directory
                 artist=$(basename "$(dirname "$(dirname "$file")")")
+
+                # Create new filename
+                new_filename="${artist} - ${album} - ${track_number} - ${title}.mp3"
+
+                # Rename the file
+                mv -n "$file" "$(dirname "$file")/$(basename "$new_filename")" && ((mp3_renamed_count++))
+            # Extract track number and title from the filename (parentheses around album)
+            elif [[ "$(basename "$file")" =~ ^(.+)-\(([^\)]+)\)-([0-9]+)-(.+)\.mp3$ ]]; then
+                artist="${BASH_REMATCH[1]}"
+                album="${BASH_REMATCH[2]}"
+                track_number="${BASH_REMATCH[3]}"
+                title="${BASH_REMATCH[4]}"
 
                 # Create new filename
                 new_filename="${artist} - ${album} - ${track_number} - ${title}.mp3"
