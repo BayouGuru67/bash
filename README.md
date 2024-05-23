@@ -1,5 +1,6 @@
 # bash
-Useful (to me, anyway) Linux bash scripts for use with the KDE Plasma Linux DE!
+Useful (to me, anyway) Linux bash scripts for use with the KDE Plasma Linux DE &/or iroffer Fserve!
+
 These scripts function as follows:
 
 "txt-file-keyword-search.py" is a KDE Plasma python script to search through a text file for a keyword or keywords and will output the results to a text file named after the input file with -keyword appended, i.e.: searching for "bar" in "foo.txt" would yield the results in a text file named "foo-bar.txt" which would consist of every line from "foo.txt" containing the keyword "bar".  Useful for searching through big lists for a certain line or section, such as file lists.  
