@@ -249,15 +249,15 @@ def get_metadata(player):
 
 def find_pack_number(filename):
     try:
-        with open('/home/bayouguru/iroffer/BayouServ.txt', 'r') as file:
+        with open('/path/to/mybot.txt', 'r') as file:
             for line in file:
                 if filename in line:
                     pack_number = line.split('#')[1].split()[0].strip()  # Extracting only the pack number
                     return pack_number
     except FileNotFoundError:
-        konversation.dbus.error(i18n("BayouServ.txt file not found."), exit=True)
+        konversation.dbus.error(i18n("mybot.txt file not found."), exit=True)
     except IndexError:
-        konversation.dbus.error(i18n("Pack number not found in BayouServ.txt."), exit=True)
+        konversation.dbus.error(i18n("Pack number not found in mybot.txt."), exit=True)
 
 def format(player, metadata):
     fixup(metadata)
@@ -293,7 +293,7 @@ def format(player, metadata):
 
     # Adding XDCC download message
     pack_number = find_pack_number(metadata['search_filename'])
-    xdcc_message = f'09Type 11"/msg BayouServ XDCC GET {pack_number}" 13to 06download 04{metadata["search_filename"]}!' if pack_number else ''
+    xdcc_message = f'09Type 11"/msg mybot XDCC GET {pack_number}" 13to 06download 04{metadata["search_filename"]}!' if pack_number else ''
     output = dict(intro=intro, info=info, player=player.identity, xdcc=xdcc_message)
 
     return string.Template(output_format).safe_substitute(output)
