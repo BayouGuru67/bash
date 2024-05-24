@@ -142,9 +142,9 @@ def list_players():
             else:
                 hastrack = hastrack == 'Playing'
 
-                player = Player(busname, name, identity, hastrack)
+            player = Player(busname, name, identity, hastrack)
 
-                running.insert(player)
+            running.insert(player)
 
             if name in player_rankings['audio']:
                 audio.insert(player, 'audio')
@@ -177,7 +177,7 @@ def check_running():
     elif is_specific_player(requested) and not filter_by_name(players_running, requested):
         konversation.dbus.error(i18n("\"%1\" is not running.", requested), exit=True)
     elif not players_running:
-        konversation.dbus.error(i18n("No running media players found."), exit=True)
+        konversation.dbus.error(i18n("No running media players found.", exit=True))
 
 def check_playing():
     if not players_eligible:
@@ -196,17 +196,22 @@ def check_playing():
             if requested == 'audio':
                 konversation.dbus.error(i18nc("1 = Comma-separated list of audio players.",
                                               "None of the running audio players (%1) are playing anything.",
-                                              ', '.join(sorted([player.identity for player in players_audio]))),
+                                              ', '.join([player.identity for player in players])),
                                         exit=True)
             elif requested == 'video':
                 konversation.dbus.error(i18nc("1 = Comma-separated list of video players.",
                                               "None of the running video players (%1) are playing anything.",
-                                              ', '.join(sorted([player.identity for player in players_video]))),
+                                              ', '.join([player.identity for player in players])),
+                                        exit=True)
+            elif requested is not None:
+                konversation.dbus.error(i18nc("1 = Comma-separated list of players.",
+                                              "None of the running instances of %1 are playing anything.",
+                                              ', '.join([player.identity for player in players])),
                                         exit=True)
             else:
-                konversation.dbus.error(i18nc("1 = Comma-separated list of media players.",
+                konversation.dbus.error(i18nc("1 = Comma-separated list of players.",
                                               "None of the running media players (%1) are playing anything.",
-                                              ', '.join(sorted([player.identity for player in players_running]))),
+                                              ', '.join([player.identity for player in players])),
                                         exit=True)
 
 def get_metadata(player):
@@ -215,44 +220,44 @@ def get_metadata(player):
     except subprocess.CalledProcessError:
         konversation.dbus.error(i18n("An error occurred while trying to retrieve media metadata from %1.", player.identity), exit=True)
 
-    keys = ('xesam:title:', 'xesam:artist:', 'xesam:albumArtist:', 'xesam:album:', 'xesam:url:')
+    keys = ('xesam:title', 'xesam:artist', 'xesam:albumArtist', 'xesam:album', 'xesam:url')
     metadata = dict()
+    search_filename = None
 
     for line in output.splitlines():
-        if line.startswith(keys):
-            key = line.split(':', 2)[1]
-            value = line.split(':', 2)[-1].strip()
+        for key in keys:
+            if line.startswith(key):
+                key = key.split(':')[1]
+                value = line.split(':', 2)[-1].strip()
 
-            if value:
-                metadata[key] = value
+                if value:
+                    metadata[key] = value
 
-    if not 'title' in metadata and 'url' in metadata:
+    # Extract the filename from the URL for searching purposes
+    if 'url' in metadata:
         url = urlsplit(metadata['url'])
-
         if url.scheme == 'file' and url.path:
-            metadata['title'] = os.path.basename(unquote_plus(url.path))
+            search_filename = os.path.basename(unquote_plus(url.path))
+        else:
+            search_filename = os.path.basename(url.path)
 
-    if not 'artist' in metadata and 'albumArtist' in metadata:
-        metadata['artist'] = metadata['albumArtist']
+    # Use filename as title if title is not available
+    if 'title' not in metadata and search_filename:
+        metadata['title'] = search_filename
 
-    return metadata
+    return metadata, search_filename
 
-def fixup(metadata):
-    for key, value in metadata.items():
-        try:
-            quote = False
-
-            if len([c for c in value if c not in SIMPLE_FIXUP]) != len(value):
-                quote = True
-            elif REGEX_FIXUP and re.search(REGEX_FIXUP, value):
-                quote = True
-
-            if quote:
-                metadata[key] = QUOTE_BEFORE + value + QUOTE_AFTER
-        except re.error:
-            konversation.dbus.error(i18nc("REGEX_FIXUP is the name of a config key in a config file.",
-                                          "There is a problem with the regular expression specified in REGEX_FIXUP."),
-                                    exit=True)
+def find_pack_number(filename):
+    try:
+        with open('/home/bayouguru/iroffer/BayouServ.txt', 'r') as file:
+            for line in file:
+                if filename in line:
+                    pack_number = line.split('#')[1].split()[0].strip()  # Extracting only the pack number
+                    return pack_number
+    except FileNotFoundError:
+        konversation.dbus.error(i18n("BayouServ.txt file not found."), exit=True)
+    except IndexError:
+        konversation.dbus.error(i18n("Pack number not found in BayouServ.txt."), exit=True)
 
 def format(player, metadata):
     fixup(metadata)
@@ -287,28 +292,25 @@ def format(player, metadata):
             intro = intro_strings['audio']
 
     # Adding XDCC download message
-    filename = metadata.get('title', '')
-    pack_number = find_pack_number(filename)
-    xdcc_message = f'09Type 11"/msg mybot XDCC GET {pack_number}" 13to 06download 04{filename}!' if pack_number else ''
+    pack_number = find_pack_number(metadata['search_filename'])
+    xdcc_message = f'09Type 11"/msg BayouServ XDCC GET {pack_number}" 13to 06download 04{metadata["search_filename"]}!' if pack_number else ''
     output = dict(intro=intro, info=info, player=player.identity, xdcc=xdcc_message)
 
     return string.Template(output_format).safe_substitute(output)
 
-def find_pack_number(filename):
-    try:
-        with open('/hpath/to/mybot.txt', 'r') as file:
-            for line in file:
-                if filename in line:
-                    pack_number = line.split('#')[1].split()[0].strip()  # Extracting only the pack number
-                    return pack_number
-    except FileNotFoundError:
-        konversation.dbus.error(i18n("mybot.txt file not found."), exit=True)
-    except IndexError:
-        konversation.dbus.error(i18n("Pack number not found in mybot.txt."), exit=True)
+def fixup(metadata):
+    if SIMPLE_FIXUP or REGEX_FIXUP:
+        for key in ('title', 'album', 'artist'):
+            if key in metadata:
+                if SIMPLE_FIXUP:
+                    if SIMPLE_FIXUP in metadata[key]:
+                        metadata[key] = QUOTE_BEFORE + metadata[key] + QUOTE_AFTER
+                if REGEX_FIXUP:
+                    if re.search(REGEX_FIXUP, metadata[key]):
+                        metadata[key] = QUOTE_BEFORE + metadata[key] + QUOTE_AFTER
 
 if __name__ == '__main__':
     if not konversation.dbus.target:
-        # No target usually means we were called from a server tab.
         version = '3'
         indent = '    '
         i = konversation.dbus.info
@@ -329,7 +331,7 @@ if __name__ == '__main__':
         check_playing()
 
         player = players_eligible[0]
-        metadata = get_metadata(player)
+        metadata, search_filename = get_metadata(player)
+        metadata['search_filename'] = search_filename
 
         konversation.dbus.say(format(player, metadata), '')
-
