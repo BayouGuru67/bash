@@ -8,101 +8,94 @@ underscore_removed_count=0
 mp3_renamed_count=0
 mp3_ignored_count=0
 spaces_removed_count=0
+already_properly_named_count=0
 
 # Function to remove underscores from filenames
 remove_underscores() {
-    local directory="$1"
-
-    # Check if directory exists
-    if [ ! -d "$directory" ]; then
-        echo "Directory $directory not found!?"
-        return 1
-    fi
-
-    # Check if there are any files with underscores
-    local files_with_underscores=()
-    shopt -s nullglob
-    for file in "$directory"/*; do
-        if [[ -f "$file" && "$file" == *_* ]]; then
-            files_with_underscores+=("$file")
-        fi
-    done
-
-    # If no files with underscores found, exit
-    if [ ${#files_with_underscores[@]} -eq 0 ]; then
-        echo "No files with underscores found in $directory"
-        return 1
-    fi
-
-    # Rename files by removing underscores
-    for file in "${files_with_underscores[@]}"; do
+    local file="$1"
+    if [[ "$file" == *_* ]]; then
         new_name="${file//_/ }"
         mv -n "$file" "$(dirname "$file")/$(basename "$new_name")" && ((underscore_removed_count++))
-    done
-
-    echo "$underscore_removed_count files had underscores removed."
+    fi
 }
 
-# Function to rename MP3 files
+# Function to rename mp3 files to the correct format
 rename_mp3() {
-    local directory="$1"
+    local file="$1"
+    local directory=$(dirname "$file")
+    local base_name=$(basename "$file" .mp3)
+    local artist=""
+    local album=""
+    local track_number=""
+    local title=""
 
-    # Process files in the directory
-    for file in "$directory"/*.mp3; do
-        if [ -f "$file" ]; then
-            # Extract track number and title from the filename (standard format)
-            if [[ "$(basename "$file")" =~ ^([0-9]+)[[:space:]]*[-]?[[:space:]]*(.+)\.mp3$ ]]; then
-                track_number="${BASH_REMATCH[1]}"
-                title="${BASH_REMATCH[2]}"
+    # Check for format "Artist (Album) - 00 Song Title"
+    if [[ "$base_name" =~ ^(.+)\ \((.+)\)\ \-\ ([0-9]+)\ (.+)$ ]]; then
+        artist="${BASH_REMATCH[1]}"
+        album="${BASH_REMATCH[2]}"
+        track_number="${BASH_REMATCH[3]}"
+        title="${BASH_REMATCH[4]}"
+    # Check for format "Artist - Album - 00 - Song Title"
+    elif [[ "$base_name" =~ ^(.+)\ -\ (.+)\ -\ ([0-9]+)\ -\ (.+)$ ]]; then
+        ((already_properly_named_count++))
+        return
+    # Check for format "Artist - Album - 00 Song Title" and fix separator
+    elif [[ "$base_name" =~ ^(.+)\ -\ (.+)\ -\ ([0-9]+)\ (.+)$ ]]; then
+        artist="${BASH_REMATCH[1]}"
+        album="${BASH_REMATCH[2]}"
+        track_number="${BASH_REMATCH[3]}"
+        title="${BASH_REMATCH[4]}"
+    # Check for format "00 - Song Title" (within an album directory)
+    elif [[ "$base_name" =~ ^([0-9]+)[[:space:]]*-\[[:space:]]*(.+)$ ]]; then
+        track_number="${BASH_REMATCH[1]}"
+        title="${BASH_REMATCH[2]}"
+        album=$(basename "$directory")
+        artist=$(basename "$(dirname "$directory")")
+    # Check for format "00 Song Title" (within an album directory)
+    elif [[ "$base_name" =~ ^([0-9]+)\ (.+)$ ]]; then
+        track_number="${BASH_REMATCH[1]}"
+        title="${BASH_REMATCH[2]}"
+        album=$(basename "$directory")
+        artist=$(basename "$(dirname "$directory")")
+    # Check for format "Song Title" (within artist directory)
+    elif [[ "$base_name" =~ ^(.+)$ ]]; then
+        title="${BASH_REMATCH[1]}"
+        artist=$(basename "$directory")
+    fi
 
-                # Get the album from the directory path
-                album=$(basename "$(dirname "$file")")
-
-                # Get the artist from the parent directory
-                artist=$(basename "$(dirname "$(dirname "$file")")")
-
-                # Create new filename
-                new_filename="${artist} - ${album} - ${track_number} - ${title}.mp3"
-
-                # Rename the file
-                mv -n "$file" "$(dirname "$file")/$(basename "$new_filename")" && ((mp3_renamed_count++))
-            # Extract track number and title from the filename (parentheses around album)
-            elif [[ "$(basename "$file")" =~ ^(.+)-\(([^\)]+)\)-([0-9]+)-(.+)\.mp3$ ]]; then
-                artist="${BASH_REMATCH[1]}"
-                album="${BASH_REMATCH[2]}"
-                track_number="${BASH_REMATCH[3]}"
-                title="${BASH_REMATCH[4]}"
-
-                # Create new filename
-                new_filename="${artist} - ${album} - ${track_number} - ${title}.mp3"
-
-                # Rename the file
-                mv -n "$file" "$(dirname "$file")/$(basename "$new_filename")" && ((mp3_renamed_count++))
-            else
-                ((mp3_ignored_count++))
-            fi
+    # Create new filename based on directory structure
+    local new_filename=""
+    if [[ "$(basename "$directory")" == "$(basename "$(dirname "$directory")")" ]]; then
+        # In the root artist directory
+        if [ -n "$artist" ] && [ -n "$title" ]; then
+            new_filename="${artist} - ${title}.mp3"
         fi
-    done
+    else
+        # In a subdirectory (album directory)
+        if [ -n "$artist" ] && [ -n "$album" ] && [ -n "$track_number" ] && [ -n "$title" ]; then
+            new_filename="${artist} - ${album} - ${track_number} - ${title}.mp3"
+        elif [ -n "$artist" ] && [ -n "$album" ] && [ -n "$title" ]; then
+            new_filename="${artist} - ${album} - ${title}.mp3"
+        fi
+    fi
 
-    echo "$mp3_renamed_count files were renamed."
-    echo "$mp3_ignored_count files were ignored due to invalid filename format."
+    # Skip if new filename is empty or if it is already properly named
+    if [ -z "$new_filename" ] || [ "$file" == "$(dirname "$file")/$new_filename" ]; then
+        ((already_properly_named_count++))
+        return
+    fi
+
+    # Rename the file if the new filename is different
+    mv -n "$file" "$(dirname "$file")/$new_filename" && ((mp3_renamed_count++))
 }
 
 # Function to remove multiple sequential spaces from filenames
 remove_extra_spaces() {
-    local directory="$1"
-
-    # Process files in the directory
-    for file in "$directory"/*.mp3; do
-        if [ -f "$file" ]; then
-            newname="$(echo "$file" | sed 's/  */ /g')"
-            if [ "$file" != "$newname" ]; then
-                mv -n "$file" "$(dirname "$file")/$(basename "$newname")" && ((spaces_removed_count++))
-            fi
-        fi
-    done
-
-    echo "$spaces_removed_count files had extra spaces removed."
+    local file="$1"
+    newname="$(echo "$file" | sed 's/  */ /g')"
+    if [ "$file" != "$newname" ]; then
+        mv -n "$file" "$(dirname "$file")/$(basename "$newname")" && ((spaces_removed_count++))
+    fi
 }
 
 # Function to display KDE Plasma path selection dialog box
@@ -113,9 +106,11 @@ select_directory() {
 
 # Function to prompt for processing more files
 prompt_process_more() {
-    kdialog --yesno "MP3 files renamed: $mp3_renamed_count
-Files with underscores removed: $underscore_removed_count
-Files with extra spaces removed: $spaces_removed_count
+    kdialog --yesno "$mp3_renamed_count = mp3 files renamed
+$underscore_removed_count = files w underscores removed
+$spaces_removed_count = files w extra spaces removed
+$already_properly_named_count = files already properly named
+$mp3_ignored_count = files ignored due to invalid filename format
 Do you want to process more files?" --yes-label "Yes" --no-label "No"
 }
 
@@ -125,11 +120,11 @@ Do you want to process more files?" --yes-label "Yes" --no-label "No"
 while true; do
     # Check if a directory path argument is provided
     if [ -n "$1" ]; then
-        directory="$1"
+        root_directory="$1"
     else
         # Prompt for directory selection
-        directory=$(select_directory)
-        if [ -z "$directory" ]; then
+        root_directory=$(select_directory)
+        if [ -z "$root_directory" ]; then
             echo "No directory selected. Exiting."
             exit 1
         fi
@@ -140,15 +135,21 @@ while true; do
     mp3_renamed_count=0
     mp3_ignored_count=0
     spaces_removed_count=0
+    already_properly_named_count=0
 
-    # Remove underscores from filenames
-    remove_underscores "$directory"
+    # Process files in all subdirectories
+    while IFS= read -r file; do
+        remove_underscores "$file"
+        rename_mp3 "$file"
+        remove_extra_spaces "$file"
+    done < <(find "$root_directory" -type f -name "*.mp3")
 
-    # Rename MP3 files
-    rename_mp3 "$directory"
-
-    # Remove extra spaces from filenames
-    remove_extra_spaces "$directory"
+    # Display summary
+    echo "$mp3_renamed_count = mp3 files renamed"
+    echo "$underscore_removed_count = files w underscores removed"
+    echo "$spaces_removed_count = files w extra spaces removed"
+    echo "$already_properly_named_count = files already properly named"
+    echo "$mp3_ignored_count = files ignored due to invalid filename format"
 
     # Prompt for processing more files
     if ! prompt_process_more; then
